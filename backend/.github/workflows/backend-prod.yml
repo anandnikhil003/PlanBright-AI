@@ -1,0 +1,57 @@
+name: Deploy to PROD - BACKEND
+
+on:
+  workflow_dispatch:
+
+env:
+  AWS_REGION: ${{ secrets.AWS_REGION }}
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: Deploy
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: [18.x]
+
+    environment: prod
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v1-node16
+        with:
+          aws-access-key-id: ${{ secrets.AWS_PROD_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_PROD_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: copy file via ssh key
+        uses: appleboy/scp-action@master
+        with:
+          host: ${{ secrets.UC_BOT_PLATFORM_PROD_EC2_HOST_IP }}
+          username: ${{ secrets.UC_BOT_PLATFORM_PROD_EC2_HOST_USER_NAME }}
+          port: 22
+          key: ${{ secrets.UC_BOT_PLATFORM_PROD_EC2_SSH_KEY }}
+          source: "./"
+          target: "/home/ubuntu/actiondir/repo"
+
+      - name: Deploye backend
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.UC_BOT_PLATFORM_PROD_EC2_HOST_IP }}
+          username: ${{ secrets.UC_BOT_PLATFORM_PROD_EC2_HOST_USER_NAME  }}
+          key: ${{ secrets.UC_BOT_PLATFORM_PROD_EC2_SSH_KEY }}
+          port: 22
+          script: |
+            sudo su
+            rm -r /home/ubuntu/actiondir/unconstrained-bot-backend
+            mv /home/ubuntu/actiondir/repo/ /home/ubuntu/actiondir/unconstrained-bot-backend
+            cp /home/ubuntu/unconstrained-bot-backend/.env /home/ubuntu/actiondir/unconstrained-bot-backend/.env
+            cd /home/ubuntu/actiondir/unconstrained-bot-backend
+            sudo pip install -r requirements.txt
+            sudo systemctl restart uc-bot

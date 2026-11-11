@@ -1,0 +1,63 @@
+name: Deploy to prod - Python BACKEND
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+env:
+  AWS_REGION: ${{ secrets.PROD_AWS_REGION }}
+  BASTION_HOST: ${{ secrets.BASTION_HOST }}
+  BASTION_USER: ${{ secrets.BASTION_USER }}
+  BASTION_PRIVATE_KEY: ${{ secrets.BASTION_PRIVATE_KEY }}
+  PRIVATE_INSTANCE_USER: ${{ secrets.PRIVATE_INSTANCE_USER }}
+  PRIVATE_INSTANCE_IP: ${{ secrets.PRIVATE_INSTANCE_IP }}
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: Deploy
+    runs-on: ubuntu-latest
+    environment: python-prod-env
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.ACESSKEYIDPROD }}
+          aws-secret-access-key: ${{ secrets.KEYPRODPYTHONUC }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Install SSH client
+        run: sudo apt-get install -y openssh-client
+
+      - name: Setup SSH Key
+        run: |
+          echo "${{ secrets.BASTION_PRIVATE_KEY }}" > /tmp/BASTION_PRIVATE_KEY
+          chmod 600 /tmp/BASTION_PRIVATE_KEY
+          cat /tmp/BASTION_PRIVATE_KEY
+          ls /tmp/BASTION_PRIVATE_KEY
+
+      - name: SSH into Private Instance via Bastion Host
+        run: |
+          ssh -vvv -i /tmp/BASTION_PRIVATE_KEY -o StrictHostKeyChecking=no -t ${{ secrets.BASTION_USER }}@${{ secrets.BASTION_HOST }} << EOF
+          ssh   -i   /home/ec2-user/aistra-uc-key.pem -o StrictHostKeyChecking=no -t ${{ secrets.PRIVATE_INSTANCE_USER }}@${{ secrets.PRIVATE_INSTANCE_IP }} << 'INNER_EOF'
+          cd /home/ubuntu
+          ./run.sh
+
+          # cd unconstrained-bot-backend
+          # git checkout development
+          # git pull orgin development
+          # ls && pwd
+          # sudo ps -ef | grep python3 | grep -v grep | awk '{print $2}' | xargs kill -9
+          # pip install -r requirements.txt
+          # nohup python3 main.py > logs.txt 2>&1 &
+          INNER_EOF
+          EOF
